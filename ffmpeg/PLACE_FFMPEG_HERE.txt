@@ -1,0 +1,15 @@
+StreamTo FFmpeg Setup
+====================
+
+To bundle FFmpeg with StreamTo:
+
+1. Download FFmpeg from: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+2. Extract the zip file
+3. Copy ffmpeg.exe from the extracted bin folder to this directory
+4. Delete this instruction file
+5. Run: npm start
+
+The file should be located at:
+C:\Users\USER\OneDrive\Desktop\Projects\StreamTo\ffmpeg\ffmpeg.exe
+
+This allows StreamTo to work on any Windows PC without requiring FFmpeg installation.

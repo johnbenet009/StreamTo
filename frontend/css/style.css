@@ -1,0 +1,119 @@
+body {
+    font-family: Inter, system-ui, sans-serif;
+    background: #0f1117;
+    color: #e5e7eb;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Custom scrollbar for logs */
+#log-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+#log-content::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+#log-content::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+
+#log-content::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Smooth transitions */
+.transition-all {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Status indicator animations */
+.status-idle {
+    background-color: #6b7280;
+}
+
+.status-streaming {
+    background-color: #10b981;
+    animation: pulse 2s infinite;
+}
+
+.status-stopping {
+    background-color: #f59e0b;
+    animation: pulse 1s infinite;
+}
+
+.status-error {
+    background-color: #ef4444;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Video preview styling */
+#preview-video {
+    background: #1f2937;
+}
+
+#preview-placeholder {
+    background: #1f2937;
+}
+
+/* RTMP item styling */
+.rtmp-item {
+    background: #374151;
+    border: 1px solid #4b5563;
+    border-radius: 8px;
+    padding: 12px;
+    transition: all 0.2s ease-in-out;
+}
+
+.rtmp-item:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+}
+
+/* Button hover effects */
+button:hover {
+    transform: translateY(-1px);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+/* Form input focus effects */
+input:focus, select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Mic level bar animation */
+#mic-level-bar {
+    transition: width 0.1s ease-out;
+}
+
+/* Log panel slide animation */
+#log-panel {
+    transition: transform 0.3s ease-in-out;
+}
+
+#log-panel.show {
+    transform: translateY(0);
+}
+
+#log-panel.hide {
+    transform: translateY(100%);
+}

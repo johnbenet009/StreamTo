@@ -1,0 +1,31 @@
+{
+  "name": "streamto",
+  "version": "1.0.0",
+  "description": "StreamTo - Lightweight Node.js multi-RTMP streamer for Windows (UVC devices)",
+  "main": "main.js",
+  "scripts": { 
+    "start": "node main.js",
+    "setup": "node scripts/download-ffmpeg.js",
+    "build": "node scripts/build-exe.js",
+    "postinstall": "node scripts/download-ffmpeg.js"
+  },
+  "pkg": {
+    "assets": [
+      "frontend/**/*",
+      "ffmpeg/**/*"
+    ],
+    "outputPath": "dist"
+  },
+  "bin": { "streamto": "main.js" },
+  "author": {
+    "name": "Positive Developer",
+    "url": "https://github.com/johnbenet009",
+    "phone": "+2349014532386"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0",
+    "body-parser": "^1.20.2",
+    "fluent-ffmpeg": "^2.1.2"
+  }
+}
