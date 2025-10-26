@@ -26,6 +26,16 @@ class MultiRTMPStreamer {
         await this.loadDevices();
         await this.loadConfig();
         this.setupMicLevelMeter();
+        this.initializeQualityStatus();
+    }
+
+    initializeQualityStatus() {
+        // Initialize quality status to ready
+        const qualityElement = document.getElementById('quality-status');
+        if (qualityElement) {
+            qualityElement.textContent = 'Ready';
+            qualityElement.className = 'text-gray-400 font-semibold';
+        }
     }
 
     setupWebSocket() {
@@ -69,7 +79,9 @@ class MultiRTMPStreamer {
         // Parse FFmpeg output for FPS and bitrate
         // Example: frame= 1234 fps= 30 q=28.0 size= 1024kB time=00:00:41.23 bitrate= 203.4kbits/s speed=1.0x
         const fpsMatch = logLine.match(/fps=\s*(\d+(?:\.\d+)?)/);
-        const bitrateMatch = logLine.match(/bitrate=\s*(\d+(?:\.\d+)?)kbits\/s/);
+        const bitrateMatch = logLine.match(/bitrate=\s*(\d+(?:\.\d+)?)kbits\/s/) || 
+                           logLine.match(/bitrate=\s*(\d+(?:\.\d+)?)kb\/s/) ||
+                           logLine.match(/bitrate=\s*(\d+(?:\.\d+)?)Mbits\/s/);
         const timeMatch = logLine.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
         const frameMatch = logLine.match(/frame=\s*(\d+)/);
         
@@ -81,7 +93,12 @@ class MultiRTMPStreamer {
         }
         
         if (bitrateMatch) {
-            this.streamStats.bitrate = parseFloat(bitrateMatch[1]);
+            let bitrate = parseFloat(bitrateMatch[1]);
+            // Convert Mbits/s to kbits/s if needed
+            if (logLine.includes('Mbits/s')) {
+                bitrate = bitrate * 1000;
+            }
+            this.streamStats.bitrate = bitrate;
             statsUpdated = true;
         }
         
@@ -108,10 +125,17 @@ class MultiRTMPStreamer {
         document.getElementById('fps-display').textContent = this.streamStats.fps.toFixed(1);
         document.getElementById('bitrate-display').textContent = `${this.streamStats.bitrate.toFixed(1)} kbps`;
         
-        const duration = this.streamStats.duration;
-        const hours = Math.floor(duration / 3600);
-        const minutes = Math.floor((duration % 3600) / 60);
-        const seconds = duration % 60;
+        // Calculate duration from start time if streaming
+        let displayDuration = 0;
+        if (this.streamStats.startTime && this.isStreaming) {
+            displayDuration = Math.floor((Date.now() - this.streamStats.startTime) / 1000);
+        } else {
+            displayDuration = this.streamStats.duration;
+        }
+        
+        const hours = Math.floor(displayDuration / 3600);
+        const minutes = Math.floor((displayDuration % 3600) / 60);
+        const seconds = displayDuration % 60;
         document.getElementById('duration-display').textContent = 
             `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         
@@ -124,22 +148,29 @@ class MultiRTMPStreamer {
         const fps = this.streamStats.fps;
         const bitrate = this.streamStats.bitrate;
         
-        // Determine quality status
+        // Only update quality if we're actually streaming and have data
+        if (!this.isStreaming || (fps === 0 && bitrate === 0)) {
+            qualityElement.textContent = 'Ready';
+            qualityElement.className = 'text-gray-400 font-semibold';
+            return;
+        }
+        
+        // Determine quality status based on actual performance
         if (fps >= 25 && bitrate >= 1000) {
             qualityElement.textContent = 'Excellent';
-            qualityElement.className = 'text-green-400';
+            qualityElement.className = 'text-green-400 font-semibold';
         } else if (fps >= 20 && bitrate >= 500) {
             qualityElement.textContent = 'Good';
-            qualityElement.className = 'text-green-400';
+            qualityElement.className = 'text-green-400 font-semibold';
         } else if (fps >= 15 && bitrate >= 300) {
             qualityElement.textContent = 'Fair';
-            qualityElement.className = 'text-yellow-400';
+            qualityElement.className = 'text-yellow-400 font-semibold';
         } else if (fps >= 10 && bitrate >= 200) {
             qualityElement.textContent = 'Poor';
-            qualityElement.className = 'text-orange-400';
-        } else {
+            qualityElement.className = 'text-orange-400 font-semibold';
+        } else if (fps > 0 || bitrate > 0) {
             qualityElement.textContent = 'Bad';
-            qualityElement.className = 'text-red-400';
+            qualityElement.className = 'text-red-400 font-semibold';
         }
     }
 
@@ -858,7 +889,11 @@ class MultiRTMPStreamer {
                 stopBtn.disabled = false;
                 this.isStreaming = true;
                 this.streamStats.startTime = Date.now();
+                this.streamStats.fps = 0;
+                this.streamStats.bitrate = 0;
+                this.streamStats.duration = 0;
                 this.startStatsTimer();
+                this.updateStatsDisplay(); // Update display immediately
                 break;
             case 'stopping':
                 indicator.classList.add('status-stopping');
@@ -966,9 +1001,8 @@ class MultiRTMPStreamer {
 
     startStatsTimer() {
         this.statsInterval = setInterval(() => {
-            if (this.streamStats.startTime) {
-                const elapsed = Math.floor((Date.now() - this.streamStats.startTime) / 1000);
-                this.streamStats.duration = elapsed;
+            if (this.streamStats.startTime && this.isStreaming) {
+                // Update the display every second to show live duration
                 this.updateStatsDisplay();
             }
         }, 1000);
@@ -989,6 +1023,13 @@ class MultiRTMPStreamer {
             startTime: null
         };
         this.updateStatsDisplay();
+        
+        // Reset quality status to ready
+        const qualityElement = document.getElementById('quality-status');
+        if (qualityElement) {
+            qualityElement.textContent = 'Ready';
+            qualityElement.className = 'text-gray-400 font-semibold';
+        }
     }
 
     showNetworkSpeedModal() {

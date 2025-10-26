@@ -14,60 +14,49 @@ function getQualitySettings(preset, destinationCount) {
     low: {
       videoBitrate: '500k',
       maxrate: '600k',
-      bufsize: '1000k',
+      bufsize: '1200k',
       audioBitrate: '64k',
       fps: '15',
       keyframe: '30',
       preset: 'ultrafast',
-      bufferSize: '50M'
+      bufferSize: '30M'  // Smaller buffer for webcams
     },
     medium: {
       videoBitrate: '1500k',
       maxrate: '1800k',
-      bufsize: '3000k',
+      bufsize: '3600k',
       audioBitrate: '128k',
       fps: '25',
       keyframe: '50',
-      preset: 'fast',
-      bufferSize: '100M'
+      preset: 'ultrafast',  // Faster preset for multiple streams
+      bufferSize: '50M'     // Optimized buffer size
     },
     high: {
       videoBitrate: '2500k',
       maxrate: '3000k',
-      bufsize: '5000k',
+      bufsize: '6000k',
       audioBitrate: '160k',
       fps: '30',
       keyframe: '60',
-      preset: 'medium',
-      bufferSize: '150M'
+      preset: 'fast',       // Balanced preset
+      bufferSize: '75M'     // Reasonable buffer
     },
     ultra: {
       videoBitrate: '4000k',
       maxrate: '4800k',
-      bufsize: '8000k',
+      bufsize: '9600k',
       audioBitrate: '192k',
       fps: '30',
       keyframe: '60',
-      preset: 'medium',
-      bufferSize: '200M'
+      preset: 'fast',       // Don't use slow presets for multiple streams
+      bufferSize: '100M'    // Conservative buffer
     }
   }
   
   let settings = baseSettings[preset] || baseSettings.medium
   
-  // Adjust for multiple destinations (reduce quality to handle load)
-  if (destinationCount > 1) {
-    const reduction = Math.min(0.3, (destinationCount - 1) * 0.15) // Max 30% reduction
-    const videoBitrate = parseInt(settings.videoBitrate.replace('k', ''))
-    const maxrate = parseInt(settings.maxrate.replace('k', ''))
-    
-    settings = {
-      ...settings,
-      videoBitrate: Math.floor(videoBitrate * (1 - reduction)) + 'k',
-      maxrate: Math.floor(maxrate * (1 - reduction)) + 'k',
-      preset: 'ultrafast' // Use fastest preset for multiple destinations
-    }
-  }
+  // No quality reduction needed since we encode once and distribute
+  // Multiple destinations now use the same encoded stream (much more efficient!)
   
   return settings
 }
@@ -110,10 +99,13 @@ function startStream(o){
     // Get quality settings
     const qualitySettings = getQualitySettings(quality || 'medium', rtmps.length)
     
-    // Simplified approach - use tee for multiple outputs
+    // Simple approach that was working before
     const inputString = `video=${video}:audio=${audio}`
     
+    // EFFICIENT APPROACH: Single encode, multiple outputs
+    // This encodes ONCE and sends the same stream to all platforms
     let args
+    
     if (rtmps.length === 1) {
       // Single destination - simple and reliable
       args = [
@@ -136,13 +128,16 @@ function startStream(o){
         rtmps[0]
       ]
     } else {
-      // Multiple destinations - use tee muxer with proper syntax
-      const teeOutput = rtmps.map(url => `[f=flv:onfail=ignore]${url}`).join('|')
+      // Multiple destinations - ENCODE ONCE, distribute to all
+      // Use tee muxer with proper syntax for efficient streaming
+      const teeOutputs = rtmps.map(url => `[f=flv:onfail=ignore:use_fifo=1]${url}`).join('|')
+      
       args = [
         '-y',
         '-f', 'dshow',
         '-rtbufsize', qualitySettings.bufferSize,
         '-i', inputString,
+        // Encode ONCE with optimal settings
         '-c:v', 'libx264',
         '-preset', qualitySettings.preset,
         '-tune', 'zerolatency',
@@ -154,10 +149,10 @@ function startStream(o){
         '-r', qualitySettings.fps,
         '-c:a', 'aac',
         '-b:a', qualitySettings.audioBitrate,
+        // Use tee muxer with FIFO for better performance
         '-f', 'tee',
-        '-map', '0:v',
-        '-map', '0:a',
-        teeOutput
+        '-flags', '+global_header',  // Important for tee muxer
+        teeOutputs
       ]
     }
     

@@ -29,23 +29,26 @@
             <h2 class="text-lg font-semibold mb-4">Device Selection</h2>
             
             <div class="space-y-4">
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="block text-sm font-medium">Video Input</label>
-                        <button id="refresh-devices" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors">
-                            🔄
-                        </button>
+                <!-- Device Inputs Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="block text-sm font-medium">Video Input</label>
+                            <button id="refresh-devices" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors">
+                                🔄
+                            </button>
+                        </div>
+                        <select id="camera-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                            <option value="">Loading cameras...</option>
+                        </select>
                     </div>
-                    <select id="camera-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <option value="">Loading cameras...</option>
-                    </select>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium mb-2">Audio Input</label>
-                    <select id="mic-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <option value="">Loading microphones...</option>
-                    </select>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Audio Input</label>
+                        <select id="mic-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                            <option value="">Loading microphones...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Mic Level Meter -->
@@ -73,28 +76,7 @@
                     </select>
                 </div>
 
-                <!-- Stream Stats -->
-                <div>
-                    <label class="block text-sm font-medium mb-2">Stream Stats</label>
-                    <div class="bg-gray-700 rounded-lg p-3 space-y-2">
-                        <div class="flex justify-between text-xs">
-                            <span class="text-gray-400">FPS:</span>
-                            <span id="fps-display" class="text-white">0</span>
-                        </div>
-                        <div class="flex justify-between text-xs">
-                            <span class="text-gray-400">Bitrate:</span>
-                            <span id="bitrate-display" class="text-white">0 kbps</span>
-                        </div>
-                        <div class="flex justify-between text-xs">
-                            <span class="text-gray-400">Duration:</span>
-                            <span id="duration-display" class="text-white">00:00:00</span>
-                        </div>
-                        <div class="flex justify-between text-xs">
-                            <span class="text-gray-400">Quality:</span>
-                            <span id="quality-status" class="text-green-400">Good</span>
-                        </div>
-                    </div>
-                </div>
+
 
                 <!-- Stream Controls -->
                 <div class="pt-4 space-y-3">
@@ -121,7 +103,30 @@
         <!-- Center Panel - Video Preview -->
         <div class="flex-1 flex flex-col min-w-0">
             <div class="p-4 flex-1">
-                <h2 class="text-lg font-semibold mb-3">Video Preview</h2>
+                <!-- Stream Stats -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2"></label>
+                    <div class="bg-gray-700 rounded-lg p-3 grid grid-cols-4 gap-4 text-xs">
+                        <div class="text-center">
+                            <div class="text-gray-400">FPS</div>
+                            <div id="fps-display" class="text-white font-semibold">0</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-400">Bitrate</div>
+                            <div id="bitrate-display" class="text-white font-semibold">0 kbps</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-400">Duration</div>
+                            <div id="duration-display" class="text-white font-semibold">00:00:00</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-400">Quality</div>
+                            <div id="quality-status" class="text-gray-400 font-semibold">Ready</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 class="text-lg font-semibold mb-3">Feed Preview</h2>
                 <div class="bg-gray-800 rounded-lg overflow-hidden h-full max-h-96">
                     <video id="preview-video" class="w-full h-full object-cover hidden" autoplay muted playsinline></video>
                     <div id="preview-placeholder" class="w-full h-full flex items-center justify-center text-gray-500">
