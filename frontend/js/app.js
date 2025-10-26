@@ -146,6 +146,22 @@ class MultiRTMPStreamer {
             this.hideLogPanel();
         });
 
+        // Developer modal
+        document.getElementById('developer-link').addEventListener('click', () => {
+            this.showDeveloperModal();
+        });
+
+        document.getElementById('close-developer-modal').addEventListener('click', () => {
+            this.hideDeveloperModal();
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('developer-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'developer-modal') {
+                this.hideDeveloperModal();
+            }
+        });
+
         // Platform presets
         document.getElementById('rtmp-platform').addEventListener('change', (e) => {
             this.handlePlatformChange(e.target.value);
@@ -670,16 +686,24 @@ class MultiRTMPStreamer {
         
         if (panel.classList.contains('hidden')) {
             panel.classList.remove('hidden');
-            button.textContent = 'Hide Logs';
+            button.textContent = '📊 Hide Monitor';
         } else {
             panel.classList.add('hidden');
-            button.textContent = 'Show Logs';
+            button.textContent = '📊 Activity Monitor';
         }
     }
 
     hideLogPanel() {
         document.getElementById('log-panel').classList.add('hidden');
-        document.getElementById('toggle-logs').textContent = 'Show Logs';
+        document.getElementById('toggle-logs').textContent = '📊 Activity Monitor';
+    }
+
+    showDeveloperModal() {
+        document.getElementById('developer-modal').classList.remove('hidden');
+    }
+
+    hideDeveloperModal() {
+        document.getElementById('developer-modal').classList.add('hidden');
     }
 
     addLog(message) {
