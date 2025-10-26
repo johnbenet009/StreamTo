@@ -49,9 +49,9 @@ function startStream(o){
     const inputString = `video=${video}:audio=${audio}`
     // Optimize settings based on number of destinations
     const isMultiStream = rtmps.length > 1
-    const bufferSize = isMultiStream ? '200M' : '300M'  // Increased buffer size
-    const preset = isMultiStream ? 'ultrafast' : 'fast'
-    const bitrate = isMultiStream ? '800k' : '1200k'    // Reduced bitrate to prevent overload
+    const bufferSize = isMultiStream ? '500M' : '800M'  // Much larger buffer size
+    const preset = 'ultrafast'  // Always use ultrafast for best performance
+    const bitrate = isMultiStream ? '600k' : '800k'    // Further reduced bitrate
     
     const baseArgs = [
       '-y',  // Overwrite output files without asking
@@ -62,12 +62,13 @@ function startStream(o){
       '-c:v','libx264',
       '-preset', preset,
       '-tune','zerolatency',
-      '-profile:v','baseline',
+      '-profile:v','main',  // Use main profile (supports 4:2:2)
+      '-pix_fmt','yuv420p',  // Force compatible pixel format
       '-b:v', bitrate,
       '-maxrate', bitrate,
       '-bufsize', `${parseInt(bitrate) * 2}k`,
       '-g', '50',
-      '-r', '25',  // Output framerate
+      '-r', '20',  // Reduced framerate for better performance
       '-s', '1280x720',  // Output resolution
       '-c:a','aac',
       '-b:a','96k',
@@ -95,7 +96,8 @@ function startStream(o){
           outputArgs.push(
             '-map', '0:v', '-map', '0:a',
             '-c:v', 'libx264', '-preset', 'ultrafast',
-            '-b:v', '800k', '-maxrate', '800k', '-bufsize', '1600k',
+            '-profile:v', 'main', '-pix_fmt', 'yuv420p',
+            '-b:v', '600k', '-maxrate', '600k', '-bufsize', '1200k',
             '-c:a', 'aac', '-b:a', '96k',
             '-f', 'flv'
           )
@@ -104,8 +106,10 @@ function startStream(o){
           outputArgs.push(
             '-map', '0:v', '-map', '0:a',
             '-c:v', 'libx264', '-preset', 'ultrafast',
-            '-b:v', '600k', '-maxrate', '600k', '-bufsize', '1200k',
-            '-s', '960x540',  // Lower resolution for additional streams
+            '-profile:v', 'main', '-pix_fmt', 'yuv420p',
+            '-b:v', '400k', '-maxrate', '400k', '-bufsize', '800k',
+            '-s', '854x480',  // Lower resolution for additional streams
+            '-r', '15',  // Even lower framerate for additional streams
             '-c:a', 'aac', '-b:a', '64k',
             '-f', 'flv'
           )
@@ -169,6 +173,10 @@ function startStream(o){
             errorMessage = 'Invalid RTMP stream key or URL format'
           } else if (errorOutput.includes('real-time buffer') && errorOutput.includes('too full')) {
             errorMessage = 'Camera buffer overflow - try reducing video quality or closing other apps'
+          } else if (errorOutput.includes('baseline profile doesn\'t support')) {
+            errorMessage = 'Camera format incompatible - switching to main profile'
+          } else if (errorOutput.includes('Error setting profile')) {
+            errorMessage = 'Video encoding profile error - using compatible settings'
           }
           
           // Send specific error to frontend
