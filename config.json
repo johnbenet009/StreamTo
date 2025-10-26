@@ -2,17 +2,17 @@
   "rtmps": [
     {
       "platform": "Facebook Live",
-      "url": "rtmps://live-api-s.facebook.com:443/rtmp/FB-26058122080444316-0-Ab0CIplQYHAFA6FjTMB7FDya",
-      "key": "FB-26058122080444316-0-Ab0CIplQYHAFA6FjTMB7FDya"
+      "url": "rtmps://live-api-s.facebook.com:443/rtmp/***********FDya",
+      "key": "FB-260581220***********"
     },
     {
       "platform": "Facebook Live",
-      "url": "rtmps://live-api-s.facebook.com:443/rtmp/FB-1268479325297076-0-Ab0NftroWUZJjS7dYcANRa7i",
-      "key": "FB-1268479325297076-0-Ab0NftroWUZJjS7dYcANRa7i"
+      "url": "rtmps://live-api-s.facebook.com:443/rtmp/FB-12***********",
+      "key": "FB-126847**********"
     },
     {
       "platform": "Custom RTMP",
-      "url": "FB-1268479325297076-0-Ab0NftroWUZJjS7dYcANRa7i",
+      "url": "FB-12***********i",
       "key": null
     }
   ]
