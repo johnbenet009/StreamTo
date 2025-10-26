@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StreamTo Configuration",
+  "type": "object",
+  "properties": {
+    "rtmps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "Platform name (e.g., Facebook Live, YouTube Live)"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Complete RTMP URL with stream key"
+          },
+          "key": {
+            "type": ["string", "null"],
+            "description": "Stream key (null for custom URLs)"
+          }
+        },
+        "required": ["platform", "url"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["rtmps"],
+  "additionalProperties": false
+}
