@@ -114,6 +114,33 @@ class MultiRTMPStreamer {
         const seconds = duration % 60;
         document.getElementById('duration-display').textContent = 
             `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Update quality status based on performance
+        this.updateQualityStatus();
+    }
+
+    updateQualityStatus() {
+        const qualityElement = document.getElementById('quality-status');
+        const fps = this.streamStats.fps;
+        const bitrate = this.streamStats.bitrate;
+        
+        // Determine quality status
+        if (fps >= 25 && bitrate >= 1000) {
+            qualityElement.textContent = 'Excellent';
+            qualityElement.className = 'text-green-400';
+        } else if (fps >= 20 && bitrate >= 500) {
+            qualityElement.textContent = 'Good';
+            qualityElement.className = 'text-green-400';
+        } else if (fps >= 15 && bitrate >= 300) {
+            qualityElement.textContent = 'Fair';
+            qualityElement.className = 'text-yellow-400';
+        } else if (fps >= 10 && bitrate >= 200) {
+            qualityElement.textContent = 'Poor';
+            qualityElement.className = 'text-orange-400';
+        } else {
+            qualityElement.textContent = 'Bad';
+            qualityElement.className = 'text-red-400';
+        }
     }
 
     setupEventListeners() {
@@ -129,6 +156,11 @@ class MultiRTMPStreamer {
         // Stream controls
         document.getElementById('start-stream').addEventListener('click', () => {
             this.startStream();
+        });
+
+        // Quality preset change
+        document.getElementById('quality-preset').addEventListener('change', (e) => {
+            this.handleQualityChange(e.target.value);
         });
 
         document.getElementById('stop-stream').addEventListener('click', () => {
@@ -721,6 +753,7 @@ class MultiRTMPStreamer {
     startStream() {
         const camera = document.getElementById('camera-select').value;
         const mic = document.getElementById('mic-select').value;
+        const quality = document.getElementById('quality-preset').value;
 
         if (!camera || !mic) {
             this.showError('Please select both camera and microphone');
@@ -739,10 +772,25 @@ class MultiRTMPStreamer {
             action: 'start',
             video: camera,
             audio: mic,
+            quality: quality,
             rtmps: this.rtmpUrls.map(r => r.url)
         };
 
+        this.addLog(`🚀 Starting stream with ${quality} quality to ${this.rtmpUrls.length} destination(s)`);
         this.ws.send(JSON.stringify(data));
+    }
+
+    handleQualityChange(preset) {
+        const qualityInfo = {
+            low: { bitrate: '500 Kbps', desc: 'Slow Internet' },
+            medium: { bitrate: '1500 Kbps', desc: 'Good Internet' },
+            high: { bitrate: '2500 Kbps', desc: 'Fast Internet' },
+            ultra: { bitrate: '4000 Kbps', desc: 'Very Fast Internet' },
+            custom: { bitrate: 'Variable', desc: 'Custom Settings' }
+        };
+        
+        const info = qualityInfo[preset] || qualityInfo.medium;
+        this.addLog(`🎯 Quality preset changed to ${preset.toUpperCase()}: ${info.bitrate} - ${info.desc}`);
     }
 
     stopCameraPreview() {
@@ -1094,6 +1142,33 @@ class MultiRTMPStreamer {
         
         // Log results
         this.addLog(`🌐 Network Speed Test: ↓${formatSpeed(downloadSpeed)} ↑${formatSpeed(uploadSpeed)} ${ping}ms`);
+        
+        // Recommend quality based on upload speed
+        this.recommendQuality(uploadSpeed);
+    }
+
+    recommendQuality(uploadSpeedMbps) {
+        const qualitySelect = document.getElementById('quality-preset');
+        let recommendedQuality = 'low';
+        let recommendation = '';
+        
+        if (uploadSpeedMbps >= 6) {
+            recommendedQuality = 'ultra';
+            recommendation = 'Ultra quality recommended (4000 Kbps)';
+        } else if (uploadSpeedMbps >= 4) {
+            recommendedQuality = 'high';
+            recommendation = 'High quality recommended (2500 Kbps)';
+        } else if (uploadSpeedMbps >= 2) {
+            recommendedQuality = 'medium';
+            recommendation = 'Medium quality recommended (1500 Kbps)';
+        } else {
+            recommendedQuality = 'low';
+            recommendation = 'Low quality recommended (500 Kbps)';
+        }
+        
+        // Auto-select recommended quality
+        qualitySelect.value = recommendedQuality;
+        this.addLog(`💡 ${recommendation} based on your upload speed`);
     }
 
     async refreshDevices() {

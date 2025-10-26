@@ -9,6 +9,69 @@ function buildTee(rtmps){
   return rtmps.map(u => `[f=flv:onfail=ignore]${u}`).join('|')
 }
 
+function getQualitySettings(preset, destinationCount) {
+  const baseSettings = {
+    low: {
+      videoBitrate: '500k',
+      maxrate: '600k',
+      bufsize: '1000k',
+      audioBitrate: '64k',
+      fps: '15',
+      keyframe: '30',
+      preset: 'ultrafast',
+      bufferSize: '50M'
+    },
+    medium: {
+      videoBitrate: '1500k',
+      maxrate: '1800k',
+      bufsize: '3000k',
+      audioBitrate: '128k',
+      fps: '25',
+      keyframe: '50',
+      preset: 'fast',
+      bufferSize: '100M'
+    },
+    high: {
+      videoBitrate: '2500k',
+      maxrate: '3000k',
+      bufsize: '5000k',
+      audioBitrate: '160k',
+      fps: '30',
+      keyframe: '60',
+      preset: 'medium',
+      bufferSize: '150M'
+    },
+    ultra: {
+      videoBitrate: '4000k',
+      maxrate: '4800k',
+      bufsize: '8000k',
+      audioBitrate: '192k',
+      fps: '30',
+      keyframe: '60',
+      preset: 'medium',
+      bufferSize: '200M'
+    }
+  }
+  
+  let settings = baseSettings[preset] || baseSettings.medium
+  
+  // Adjust for multiple destinations (reduce quality to handle load)
+  if (destinationCount > 1) {
+    const reduction = Math.min(0.3, (destinationCount - 1) * 0.15) // Max 30% reduction
+    const videoBitrate = parseInt(settings.videoBitrate.replace('k', ''))
+    const maxrate = parseInt(settings.maxrate.replace('k', ''))
+    
+    settings = {
+      ...settings,
+      videoBitrate: Math.floor(videoBitrate * (1 - reduction)) + 'k',
+      maxrate: Math.floor(maxrate * (1 - reduction)) + 'k',
+      preset: 'ultrafast' // Use fastest preset for multiple destinations
+    }
+  }
+  
+  return settings
+}
+
 function getFFmpegPath() {
   // Try bundled FFmpeg first
   const bundledFFmpeg = path.join(__dirname, '..', 'ffmpeg', 'ffmpeg.exe')
@@ -31,7 +94,7 @@ function checkFFmpeg() {
 
 function startStream(o){
   if(currentProc) throw new Error('Stream already running')
-  const {video,audio,rtmps} = o
+  const {video,audio,rtmps,quality} = o
   if(!video||!audio||!rtmps.length) throw new Error('Missing video, audio, or RTMP destinations')
   
   return new Promise(async (resolve, reject) => {
@@ -44,6 +107,9 @@ function startStream(o){
 
     const ffmpegPath = getFFmpegPath()
     
+    // Get quality settings
+    const qualitySettings = getQualitySettings(quality || 'medium', rtmps.length)
+    
     // Simplified approach - use tee for multiple outputs
     const inputString = `video=${video}:audio=${audio}`
     
@@ -53,19 +119,19 @@ function startStream(o){
       args = [
         '-y',
         '-f', 'dshow',
-        '-rtbufsize', '100M',
+        '-rtbufsize', qualitySettings.bufferSize,
         '-i', inputString,
         '-c:v', 'libx264',
-        '-preset', 'ultrafast',
+        '-preset', qualitySettings.preset,
         '-tune', 'zerolatency',
         '-pix_fmt', 'yuv420p',
-        '-b:v', '800k',
-        '-maxrate', '800k',
-        '-bufsize', '1600k',
-        '-g', '50',
-        '-r', '25',
+        '-b:v', qualitySettings.videoBitrate,
+        '-maxrate', qualitySettings.maxrate,
+        '-bufsize', qualitySettings.bufsize,
+        '-g', qualitySettings.keyframe,
+        '-r', qualitySettings.fps,
         '-c:a', 'aac',
-        '-b:a', '128k',
+        '-b:a', qualitySettings.audioBitrate,
         '-f', 'flv',
         rtmps[0]
       ]
@@ -75,19 +141,19 @@ function startStream(o){
       args = [
         '-y',
         '-f', 'dshow',
-        '-rtbufsize', '200M',
+        '-rtbufsize', qualitySettings.bufferSize,
         '-i', inputString,
         '-c:v', 'libx264',
-        '-preset', 'ultrafast',
+        '-preset', qualitySettings.preset,
         '-tune', 'zerolatency',
         '-pix_fmt', 'yuv420p',
-        '-b:v', '600k',
-        '-maxrate', '600k',
-        '-bufsize', '1200k',
-        '-g', '50',
-        '-r', '20',
+        '-b:v', qualitySettings.videoBitrate,
+        '-maxrate', qualitySettings.maxrate,
+        '-bufsize', qualitySettings.bufsize,
+        '-g', qualitySettings.keyframe,
+        '-r', qualitySettings.fps,
         '-c:a', 'aac',
-        '-b:a', '96k',
+        '-b:a', qualitySettings.audioBitrate,
         '-f', 'tee',
         '-map', '0:v',
         '-map', '0:a',
