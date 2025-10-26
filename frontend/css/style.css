@@ -28,6 +28,71 @@ body {
     background: #6b7280;
 }
 
+/* Log content styling */
+#log-content {
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
+}
+
+/* Network Speed Test Animations */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Speed test result animations */
+#speed-test-results {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Network speed button styling */
+#network-speed-test {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+}
+
+#network-speed-test:hover {
+    background: linear-gradient(135deg, #6d28d9, #9333ea);
+}
+
+/* Auto-scroll behavior */
+#log-content {
+    scroll-behavior: smooth;
+}
+
+/* Log color classes */
+.log-error {
+    color: #ef4444 !important;
+}
+
+.log-warning {
+    color: #f59e0b !important;
+}
+
+.log-success {
+    color: #10b981 !important;
+}
+
+.log-info {
+    color: #3b82f6 !important;
+}
+
+.log-stats {
+    color: #06b6d4 !important;
+}
+
+.log-default {
+    color: #e5e7eb !important;
+}
+
 /* Smooth transitions */
 .transition-all {
     transition: all 0.2s ease-in-out;

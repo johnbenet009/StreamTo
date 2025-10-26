@@ -28,7 +28,11 @@ wss.on('connection', (ws) => {
       try {
         ws.send(JSON.stringify({ type: 'status', payload: 'starting' }))
         const proc = await ffmpegController.startStream(data)
-        ffmpegController.hookLogs(proc, line => ws.send(JSON.stringify({ type: 'log', payload: line })))
+        ffmpegController.hookLogs(
+          proc, 
+          line => ws.send(JSON.stringify({ type: 'log', payload: line })),
+          stats => ws.send(JSON.stringify({ type: 'stats', payload: stats }))
+        )
         ffmpegController.onExit((code, signal, errorMessage) => {
           if (code !== 0 && errorMessage) {
             ws.send(JSON.stringify({ type: 'error', payload: errorMessage }))

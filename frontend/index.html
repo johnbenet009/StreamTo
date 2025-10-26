@@ -30,14 +30,19 @@
             
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium mb-2">Camera</label>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium">Video Input</label>
+                        <button id="refresh-devices" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors">
+                            🔄
+                        </button>
+                    </div>
                     <select id="camera-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                         <option value="">Loading cameras...</option>
                     </select>
                 </div>
                 
                 <div>
-                    <label class="block text-sm font-medium mb-2">Microphone</label>
+                    <label class="block text-sm font-medium mb-2">Audio Input</label>
                     <select id="mic-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                         <option value="">Loading microphones...</option>
                     </select>
@@ -56,6 +61,18 @@
                     </div>
                 </div>
 
+                <!-- Quality Settings -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Stream Quality</label>
+                    <select id="quality-preset" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                        <option value="low">Low (500 Kbps) - Slow Internet</option>
+                        <option value="medium" selected>Medium (1500 Kbps) - Good Internet</option>
+                        <option value="high">High (2500 Kbps) - Fast Internet</option>
+                        <option value="ultra">Ultra (4000 Kbps) - Very Fast</option>
+                        <option value="custom">Custom Settings</option>
+                    </select>
+                </div>
+
                 <!-- Stream Stats -->
                 <div>
                     <label class="block text-sm font-medium mb-2">Stream Stats</label>
@@ -72,6 +89,10 @@
                             <span class="text-gray-400">Duration:</span>
                             <span id="duration-display" class="text-white">00:00:00</span>
                         </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-gray-400">Quality:</span>
+                            <span id="quality-status" class="text-green-400">Good</span>
+                        </div>
                     </div>
                 </div>
 
@@ -85,9 +106,14 @@
                             ⏹ Stop
                         </button>
                     </div>
-                    <button id="toggle-logs" class="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
-                        📊 Activity Monitor
-                    </button>
+                    <div class="flex space-x-2">
+                        <button id="network-speed-test" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm">
+                            🌐 Network
+                        </button>
+                        <button id="toggle-logs" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                            📊 Log
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -95,7 +121,7 @@
         <!-- Center Panel - Video Preview -->
         <div class="flex-1 flex flex-col min-w-0">
             <div class="p-4 flex-1">
-                <h2 class="text-lg font-semibold mb-3">Camera Preview</h2>
+                <h2 class="text-lg font-semibold mb-3">Video Preview</h2>
                 <div class="bg-gray-800 rounded-lg overflow-hidden h-full max-h-96">
                     <video id="preview-video" class="w-full h-full object-cover hidden" autoplay muted playsinline></video>
                     <div id="preview-placeholder" class="w-full h-full flex items-center justify-center text-gray-500">
@@ -186,10 +212,79 @@
                 <span class="mr-2">📊</span>
                 Activity Monitor
             </h3>
-            <button id="close-logs" class="text-gray-400 hover:text-white">✕</button>
+            <div class="flex items-center space-x-2">
+                <button id="auto-scroll-toggle" class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+                    🔒 Auto-scroll
+                </button>
+                <button id="clear-logs" class="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+                    🗑️ Clear
+                </button>
+                <button id="close-logs" class="text-gray-400 hover:text-white">✕</button>
+            </div>
         </div>
         <div id="log-content" class="p-4 h-52 overflow-y-auto font-mono text-sm text-gray-300 bg-black">
             <div class="text-gray-500">🔄 System ready - Activity will appear here when streaming...</div>
+        </div>
+    </div>
+
+    <!-- Network Speed Test Modal -->
+    <div id="network-speed-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-700">
+            <div class="text-center">
+                <div class="text-4xl mb-4">🌐</div>
+                <h2 class="text-2xl font-bold text-white mb-4">Network Speed Test</h2>
+                
+                <div id="speed-test-content">
+                    <div id="speed-test-loading" class="hidden">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                        <p class="text-gray-300 mb-2">Testing your connection...</p>
+                        <p id="speed-test-progress" class="text-sm text-gray-400">Initializing...</p>
+                    </div>
+                    
+                    <div id="speed-test-results" class="hidden">
+                        <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-blue-400" id="download-speed">--</div>
+                                    <div class="text-gray-400">Download</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-green-400" id="upload-speed">--</div>
+                                    <div class="text-gray-400">Upload</div>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-center">
+                                <div class="text-lg font-semibold text-yellow-400" id="ping-result">--</div>
+                                <div class="text-gray-400 text-sm">Ping</div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-xs text-gray-400 mb-4">
+                            <p>💡 For smooth streaming:</p>
+                            <p>• Upload speed should be 2x your stream bitrate</p>
+                            <p>• Ping should be under 50ms for best quality</p>
+                        </div>
+                    </div>
+                    
+                    <div id="speed-test-idle" class="text-gray-300">
+                        <p class="mb-4">Test your internet connection speed to ensure optimal streaming performance.</p>
+                        <div class="text-sm text-gray-400 mb-4">
+                            <p>• Tests download and upload speeds</p>
+                            <p>• Measures network latency (ping)</p>
+                            <p>• Helps optimize stream settings</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button id="start-speed-test" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        Start Test
+                    </button>
+                    <button id="close-speed-modal" class="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 

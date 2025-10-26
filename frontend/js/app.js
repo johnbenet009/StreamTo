@@ -14,6 +14,8 @@ class MultiRTMPStreamer {
             startTime: null
         };
         this.statsInterval = null;
+        this.autoScroll = true;
+        this.speedTestInProgress = false;
         
         this.init();
     }
@@ -69,13 +71,18 @@ class MultiRTMPStreamer {
         const fpsMatch = logLine.match(/fps=\s*(\d+(?:\.\d+)?)/);
         const bitrateMatch = logLine.match(/bitrate=\s*(\d+(?:\.\d+)?)kbits\/s/);
         const timeMatch = logLine.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+        const frameMatch = logLine.match(/frame=\s*(\d+)/);
+        
+        let statsUpdated = false;
         
         if (fpsMatch) {
             this.streamStats.fps = parseFloat(fpsMatch[1]);
+            statsUpdated = true;
         }
         
         if (bitrateMatch) {
             this.streamStats.bitrate = parseFloat(bitrateMatch[1]);
+            statsUpdated = true;
         }
         
         if (timeMatch) {
@@ -83,9 +90,13 @@ class MultiRTMPStreamer {
             const minutes = parseInt(timeMatch[2]);
             const seconds = parseInt(timeMatch[3]);
             this.streamStats.duration = hours * 3600 + minutes * 60 + seconds;
+            statsUpdated = true;
         }
         
-        this.updateStatsDisplay();
+        // Only update display if we actually parsed some stats
+        if (statsUpdated) {
+            this.updateStatsDisplay();
+        }
     }
 
     updateStreamStats(stats) {
@@ -146,6 +157,32 @@ class MultiRTMPStreamer {
             this.hideLogPanel();
         });
 
+        document.getElementById('auto-scroll-toggle').addEventListener('click', () => {
+            this.toggleAutoScroll();
+        });
+
+        document.getElementById('clear-logs').addEventListener('click', () => {
+            this.clearLogs();
+        });
+
+        // Network Speed Test
+        document.getElementById('network-speed-test').addEventListener('click', () => {
+            this.showNetworkSpeedModal();
+        });
+
+        document.getElementById('start-speed-test').addEventListener('click', () => {
+            this.startNetworkSpeedTest();
+        });
+
+        document.getElementById('close-speed-modal').addEventListener('click', () => {
+            this.hideNetworkSpeedModal();
+        });
+
+        // Refresh Devices
+        document.getElementById('refresh-devices').addEventListener('click', () => {
+            this.refreshDevices();
+        });
+
         // Developer modal
         document.getElementById('developer-link').addEventListener('click', () => {
             this.showDeveloperModal();
@@ -162,9 +199,36 @@ class MultiRTMPStreamer {
             }
         });
 
+        document.getElementById('network-speed-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'network-speed-modal') {
+                this.hideNetworkSpeedModal();
+            }
+        });
+
         // Platform presets
         document.getElementById('rtmp-platform').addEventListener('change', (e) => {
             this.handlePlatformChange(e.target.value);
+        });
+
+        // Auto-scroll detection
+        document.getElementById('log-content').addEventListener('scroll', (e) => {
+            const element = e.target;
+            const isAtBottom = element.scrollHeight - element.clientHeight <= element.scrollTop + 1;
+            
+            // If user scrolled up, disable auto-scroll
+            if (!isAtBottom && this.autoScroll) {
+                this.autoScroll = false;
+                const button = document.getElementById('auto-scroll-toggle');
+                button.textContent = '🔓 Manual';
+                button.className = 'px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors';
+            }
+            // If user scrolled to bottom, enable auto-scroll
+            else if (isAtBottom && !this.autoScroll) {
+                this.autoScroll = true;
+                const button = document.getElementById('auto-scroll-toggle');
+                button.textContent = '🔒 Auto-scroll';
+                button.className = 'px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
+            }
         });
     }
 
@@ -257,10 +321,42 @@ class MultiRTMPStreamer {
             const response = await fetch('/api/config');
             const config = await response.json();
             this.rtmpUrls = config.rtmps || [];
+            
+            // Migrate old config format to new numbered format
+            this.migrateRTMPConfig();
+            
             this.renderRTMPList();
         } catch (error) {
             console.error('Failed to load config:', error);
         }
+    }
+
+    migrateRTMPConfig() {
+        // Add basePlatform property and numbering to existing configs
+        this.rtmpUrls.forEach(rtmp => {
+            if (!rtmp.basePlatform) {
+                // Determine platform type from existing platform name
+                const platformName = rtmp.platform.toLowerCase();
+                if (platformName.includes('custom')) {
+                    rtmp.basePlatform = 'custom';
+                } else if (platformName.includes('youtube')) {
+                    rtmp.basePlatform = 'youtube';
+                } else if (platformName.includes('facebook')) {
+                    rtmp.basePlatform = 'facebook';
+                } else if (platformName.includes('twitch')) {
+                    rtmp.basePlatform = 'twitch';
+                } else {
+                    rtmp.basePlatform = 'custom'; // Default fallback
+                }
+            }
+            
+            // Clean up old numbering formats for migration
+            rtmp.platform = rtmp.platform.replace(/^\d+\.\s*/, ''); // Remove "1. " format
+            rtmp.platform = rtmp.platform.replace(/\s*\(\d+\)$/, ''); // Remove " (1)" format
+        });
+        
+        // Renumber all destinations with new format
+        this.renumberRTMPDestinations();
     }
 
     async saveConfig() {
@@ -372,7 +468,7 @@ class MultiRTMPStreamer {
         const streamKey = document.getElementById('stream-key').value.trim();
         
         let finalUrl = '';
-        let displayName = '';
+        let basePlatformName = '';
         
         if (platform === 'custom') {
             if (!customUrl) {
@@ -380,7 +476,7 @@ class MultiRTMPStreamer {
                 return;
             }
             finalUrl = customUrl;
-            displayName = 'Custom RTMP';
+            basePlatformName = 'Custom RTMP';
         } else {
             if (!streamKey) {
                 this.showError('Please enter your stream key');
@@ -395,7 +491,15 @@ class MultiRTMPStreamer {
             };
             
             finalUrl = platformUrls[platform] + streamKey;
-            displayName = platform.charAt(0).toUpperCase() + platform.slice(1) + ' Live';
+            
+            // Set base platform names
+            const platformNames = {
+                youtube: 'YouTube Live',
+                facebook: 'Facebook Live',
+                twitch: 'Twitch'
+            };
+            
+            basePlatformName = platformNames[platform];
         }
 
         // Check for duplicate URLs
@@ -408,16 +512,20 @@ class MultiRTMPStreamer {
         // Check for duplicate stream keys (for same platform)
         if (platform !== 'custom') {
             const duplicateKey = this.rtmpUrls.some(existing => 
-                existing.key === streamKey && existing.platform.toLowerCase().includes(platform)
+                existing.key === streamKey && existing.basePlatform === platform
             );
             if (duplicateKey) {
-                this.showError(`This ${platform} stream key is already added. Use a different stream key.`);
+                this.showError(`This ${basePlatformName} stream key is already added. Use a different stream key.`);
                 return;
             }
         }
 
+        // Generate numbered display name
+        const displayName = this.generateNumberedPlatformName(basePlatformName, platform);
+
         this.rtmpUrls.push({
             platform: displayName,
+            basePlatform: platform,
             url: finalUrl,
             key: platform !== 'custom' ? streamKey : null
         });
@@ -427,10 +535,46 @@ class MultiRTMPStreamer {
         this.hideAddRTMPForm();
     }
 
+    generateNumberedPlatformName(baseName, platformType) {
+        // Count existing platforms of the same type
+        const existingCount = this.rtmpUrls.filter(rtmp => 
+            rtmp.basePlatform === platformType
+        ).length;
+        
+        // Generate the numbered name with parentheses format
+        const number = existingCount + 1;
+        return `${baseName} (${number})`;
+    }
+
     removeRTMP(index) {
         this.rtmpUrls.splice(index, 1);
+        this.renumberRTMPDestinations();
         this.renderRTMPList();
         this.saveConfig();
+    }
+
+    renumberRTMPDestinations() {
+        // Group by platform type and renumber each group
+        const platformCounts = {};
+        
+        this.rtmpUrls.forEach(rtmp => {
+            const platformType = rtmp.basePlatform;
+            
+            // Initialize counter for this platform type
+            if (!platformCounts[platformType]) {
+                platformCounts[platformType] = 0;
+            }
+            
+            // Increment counter and update display name
+            platformCounts[platformType]++;
+            const number = platformCounts[platformType];
+            
+            // Get base name without number (handle both old and new formats)
+            let baseName = rtmp.platform.replace(/^\d+\.\s*/, ''); // Remove "1. " format
+            baseName = baseName.replace(/\s*\(\d+\)$/, ''); // Remove " (1)" format
+            
+            rtmp.platform = `${baseName} (${number})`;
+        });
     }
 
     async updatePreview(cameraName) {
@@ -686,16 +830,16 @@ class MultiRTMPStreamer {
         
         if (panel.classList.contains('hidden')) {
             panel.classList.remove('hidden');
-            button.textContent = '📊 Hide Monitor';
+            button.textContent = '📊 Hide';
         } else {
             panel.classList.add('hidden');
-            button.textContent = '📊 Activity Monitor';
+            button.textContent = '📊 Log';
         }
     }
 
     hideLogPanel() {
         document.getElementById('log-panel').classList.add('hidden');
-        document.getElementById('toggle-logs').textContent = '📊 Activity Monitor';
+        document.getElementById('toggle-logs').textContent = '📊 Log';
     }
 
     showDeveloperModal() {
@@ -709,16 +853,67 @@ class MultiRTMPStreamer {
     addLog(message) {
         const logContent = document.getElementById('log-content');
         const logLine = document.createElement('div');
-        logLine.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        logLine.className = 'text-gray-300 text-xs leading-relaxed';
+        const timestamp = new Date().toLocaleTimeString();
+        
+        // Determine log type and color
+        let logClass = 'text-gray-300'; // default
+        let prefix = '';
+        
+        if (message.includes('ERROR') || message.includes('❌') || message.includes('failed') || message.includes('error')) {
+            logClass = 'text-red-400';
+            prefix = '🔴 ';
+        } else if (message.includes('WARNING') || message.includes('⚠️') || message.includes('warning') || message.includes('buffer')) {
+            logClass = 'text-yellow-400';
+            prefix = '🟡 ';
+        } else if (message.includes('✅') || message.includes('started') || message.includes('success') || message.includes('connected')) {
+            logClass = 'text-green-400';
+            prefix = '🟢 ';
+        } else if (message.includes('🚀') || message.includes('Starting') || message.includes('Stopping')) {
+            logClass = 'text-blue-400';
+            prefix = '🔵 ';
+        } else if (message.includes('frame=') || message.includes('fps=') || message.includes('bitrate=')) {
+            logClass = 'text-cyan-400';
+            prefix = '📊 ';
+        } else if (message.includes('🔄') || message.includes('ready')) {
+            logClass = 'text-white';
+            prefix = '⚪ ';
+        }
+        
+        logLine.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${prefix}<span class="${logClass}">${message}</span>`;
+        logLine.className = 'text-xs leading-relaxed mb-1';
         
         logContent.appendChild(logLine);
-        logContent.scrollTop = logContent.scrollHeight;
+        
+        // Auto-scroll to bottom only if auto-scroll is enabled
+        if (this.autoScroll) {
+            logContent.scrollTop = logContent.scrollHeight;
+        }
         
         // Keep only last 100 log lines
         while (logContent.children.length > 100) {
             logContent.removeChild(logContent.firstChild);
         }
+    }
+
+    toggleAutoScroll() {
+        this.autoScroll = !this.autoScroll;
+        const button = document.getElementById('auto-scroll-toggle');
+        
+        if (this.autoScroll) {
+            button.textContent = '🔒 Auto-scroll';
+            button.className = 'px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
+            // Scroll to bottom when re-enabling
+            const logContent = document.getElementById('log-content');
+            logContent.scrollTop = logContent.scrollHeight;
+        } else {
+            button.textContent = '🔓 Manual';
+            button.className = 'px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors';
+        }
+    }
+
+    clearLogs() {
+        const logContent = document.getElementById('log-content');
+        logContent.innerHTML = '<div class="text-gray-500">🔄 Logs cleared - Activity will appear here when streaming...</div>';
     }
 
     startStatsTimer() {
@@ -746,6 +941,198 @@ class MultiRTMPStreamer {
             startTime: null
         };
         this.updateStatsDisplay();
+    }
+
+    showNetworkSpeedModal() {
+        document.getElementById('network-speed-modal').classList.remove('hidden');
+        this.resetSpeedTestDisplay();
+    }
+
+    hideNetworkSpeedModal() {
+        document.getElementById('network-speed-modal').classList.add('hidden');
+        this.speedTestInProgress = false;
+    }
+
+    resetSpeedTestDisplay() {
+        document.getElementById('speed-test-idle').classList.remove('hidden');
+        document.getElementById('speed-test-loading').classList.add('hidden');
+        document.getElementById('speed-test-results').classList.add('hidden');
+        document.getElementById('start-speed-test').disabled = false;
+        document.getElementById('start-speed-test').textContent = 'Start Test';
+    }
+
+    async startNetworkSpeedTest() {
+        if (this.speedTestInProgress) return;
+        
+        this.speedTestInProgress = true;
+        document.getElementById('start-speed-test').disabled = true;
+        document.getElementById('start-speed-test').textContent = 'Testing...';
+        
+        // Show loading state
+        document.getElementById('speed-test-idle').classList.add('hidden');
+        document.getElementById('speed-test-results').classList.add('hidden');
+        document.getElementById('speed-test-loading').classList.remove('hidden');
+        
+        try {
+            // Test ping first
+            document.getElementById('speed-test-progress').textContent = 'Testing ping...';
+            const ping = await this.testPing();
+            
+            // Test download speed
+            document.getElementById('speed-test-progress').textContent = 'Testing download speed...';
+            const downloadSpeed = await this.testDownloadSpeed();
+            
+            // Test upload speed
+            document.getElementById('speed-test-progress').textContent = 'Testing upload speed...';
+            const uploadSpeed = await this.testUploadSpeed();
+            
+            // Show results
+            this.displaySpeedTestResults(downloadSpeed, uploadSpeed, ping);
+            
+        } catch (error) {
+            console.error('Speed test failed:', error);
+            this.addLog(`Network speed test failed: ${error.message}`);
+            document.getElementById('speed-test-progress').textContent = 'Test failed - check connection';
+        } finally {
+            this.speedTestInProgress = false;
+            document.getElementById('start-speed-test').disabled = false;
+            document.getElementById('start-speed-test').textContent = 'Test Again';
+        }
+    }
+
+    async testPing() {
+        const startTime = performance.now();
+        try {
+            // Use a small image request to test latency
+            await fetch('https://www.google.com/favicon.ico?t=' + Date.now(), { 
+                method: 'HEAD',
+                mode: 'no-cors',
+                cache: 'no-cache'
+            });
+            const endTime = performance.now();
+            return Math.round(endTime - startTime);
+        } catch (error) {
+            // Fallback ping test
+            const startTime2 = performance.now();
+            await new Promise(resolve => setTimeout(resolve, 10));
+            return Math.round(performance.now() - startTime2 + 20); // Estimated
+        }
+    }
+
+    async testDownloadSpeed() {
+        const testSizes = [
+            { url: 'https://httpbin.org/bytes/100000', size: 100000 }, // 100KB
+            { url: 'https://httpbin.org/bytes/500000', size: 500000 }, // 500KB
+            { url: 'https://httpbin.org/bytes/1000000', size: 1000000 } // 1MB
+        ];
+        
+        let totalSpeed = 0;
+        let validTests = 0;
+        
+        for (const test of testSizes) {
+            try {
+                const startTime = performance.now();
+                const response = await fetch(test.url + '?t=' + Date.now());
+                await response.blob();
+                const endTime = performance.now();
+                
+                const duration = (endTime - startTime) / 1000; // seconds
+                const speedMbps = (test.size * 8) / (duration * 1000000); // Mbps
+                
+                totalSpeed += speedMbps;
+                validTests++;
+            } catch (error) {
+                console.log('Download test failed for size:', test.size);
+            }
+        }
+        
+        return validTests > 0 ? totalSpeed / validTests : 0;
+    }
+
+    async testUploadSpeed() {
+        try {
+            // Create test data
+            const testData = new Blob([new ArrayBuffer(100000)]); // 100KB
+            
+            const startTime = performance.now();
+            await fetch('https://httpbin.org/post', {
+                method: 'POST',
+                body: testData
+            });
+            const endTime = performance.now();
+            
+            const duration = (endTime - startTime) / 1000; // seconds
+            const speedMbps = (100000 * 8) / (duration * 1000000); // Mbps
+            
+            return speedMbps;
+        } catch (error) {
+            console.log('Upload test failed:', error);
+            return 0;
+        }
+    }
+
+    displaySpeedTestResults(downloadSpeed, uploadSpeed, ping) {
+        // Hide loading, show results
+        document.getElementById('speed-test-loading').classList.add('hidden');
+        document.getElementById('speed-test-results').classList.remove('hidden');
+        
+        // Format speeds
+        const formatSpeed = (mbps) => {
+            if (mbps >= 1000) {
+                return `${(mbps / 1000).toFixed(1)} Gbps`;
+            } else if (mbps >= 1) {
+                return `${mbps.toFixed(1)} Mbps`;
+            } else {
+                return `${(mbps * 1000).toFixed(0)} Kbps`;
+            }
+        };
+        
+        // Update display
+        document.getElementById('download-speed').textContent = formatSpeed(downloadSpeed);
+        document.getElementById('upload-speed').textContent = formatSpeed(uploadSpeed);
+        document.getElementById('ping-result').textContent = `${ping}ms`;
+        
+        // Log results
+        this.addLog(`🌐 Network Speed Test: ↓${formatSpeed(downloadSpeed)} ↑${formatSpeed(uploadSpeed)} ${ping}ms`);
+    }
+
+    async refreshDevices() {
+        this.addLog('🔄 Refreshing device list...');
+        
+        // Show loading state
+        const button = document.getElementById('refresh-devices');
+        const originalText = button.textContent;
+        button.textContent = '⏳';
+        button.disabled = true;
+        
+        try {
+            // Stop any existing streams
+            if (this.previewStream) {
+                this.previewStream.getTracks().forEach(track => track.stop());
+                this.previewStream = null;
+            }
+            if (this.micStream) {
+                this.micStream.getTracks().forEach(track => track.stop());
+                this.micStream = null;
+            }
+            
+            // Clear current selections
+            document.getElementById('camera-select').innerHTML = '<option value="">Loading cameras...</option>';
+            document.getElementById('mic-select').innerHTML = '<option value="">Loading microphones...</option>';
+            
+            // Reload devices
+            await this.loadDevices();
+            
+            this.addLog('✅ Device list refreshed successfully');
+            
+        } catch (error) {
+            console.error('Failed to refresh devices:', error);
+            this.addLog(`❌ Failed to refresh devices: ${error.message}`);
+        } finally {
+            // Restore button state
+            button.textContent = originalText;
+            button.disabled = false;
+        }
     }
 
     showError(message) {

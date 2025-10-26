@@ -44,89 +44,56 @@ function startStream(o){
 
     const ffmpegPath = getFFmpegPath()
     
-    // Build args for multiple outputs (better than tee for RTMP)
-    // Don't quote in spawn args - Node.js handles this automatically
+    // Simplified approach - use tee for multiple outputs
     const inputString = `video=${video}:audio=${audio}`
-    // Optimize settings based on number of destinations
-    const isMultiStream = rtmps.length > 1
-    const bufferSize = isMultiStream ? '500M' : '800M'  // Much larger buffer size
-    const preset = 'ultrafast'  // Always use ultrafast for best performance
-    const bitrate = isMultiStream ? '600k' : '800k'    // Further reduced bitrate
     
-    const baseArgs = [
-      '-y',  // Overwrite output files without asking
-      '-f','dshow',
-      '-rtbufsize', bufferSize,
-      '-thread_queue_size', '2048',
-      '-i',inputString,
-      '-c:v','libx264',
-      '-preset', preset,
-      '-tune','zerolatency',
-      '-profile:v','main',  // Use main profile (supports 4:2:2)
-      '-pix_fmt','yuv420p',  // Force compatible pixel format
-      '-b:v', bitrate,
-      '-maxrate', bitrate,
-      '-bufsize', `${parseInt(bitrate) * 2}k`,
-      '-g', '50',
-      '-r', '20',  // Reduced framerate for better performance
-      '-s', '1280x720',  // Output resolution
-      '-c:a','aac',
-      '-b:a','96k',
-      '-ar','44100',
-      '-ac','2',
-      '-reconnect','1',
-      '-reconnect_streamed','1',
-      '-reconnect_delay_max','5'
-    ]
-    
-    // Add each RTMP destination as separate output
-    const outputArgs = []
-    
-    // Add test recording for debugging (optional)
-    if (process.env.DEBUG_RECORD) {
-      outputArgs.push('-t', '10', '-f', 'mp4', 'test_recording.mp4')
+    let args
+    if (rtmps.length === 1) {
+      // Single destination - simple and reliable
+      args = [
+        '-y',
+        '-f', 'dshow',
+        '-rtbufsize', '100M',
+        '-i', inputString,
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', '800k',
+        '-maxrate', '800k',
+        '-bufsize', '1600k',
+        '-g', '50',
+        '-r', '25',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-f', 'flv',
+        rtmps[0]
+      ]
+    } else {
+      // Multiple destinations - use tee muxer with proper syntax
+      const teeOutput = rtmps.map(url => `[f=flv:onfail=ignore]${url}`).join('|')
+      args = [
+        '-y',
+        '-f', 'dshow',
+        '-rtbufsize', '200M',
+        '-i', inputString,
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', '600k',
+        '-maxrate', '600k',
+        '-bufsize', '1200k',
+        '-g', '50',
+        '-r', '20',
+        '-c:a', 'aac',
+        '-b:a', '96k',
+        '-f', 'tee',
+        '-map', '0:v',
+        '-map', '0:a',
+        teeOutput
+      ]
     }
-    
-    // Add RTMP outputs with optimized settings for multi-streaming
-    rtmps.forEach((url, index) => {
-      if (isMultiStream) {
-        // For multi-streaming, use copy for first stream, re-encode for others
-        if (index === 0) {
-          // First stream: higher quality
-          outputArgs.push(
-            '-map', '0:v', '-map', '0:a',
-            '-c:v', 'libx264', '-preset', 'ultrafast',
-            '-profile:v', 'main', '-pix_fmt', 'yuv420p',
-            '-b:v', '600k', '-maxrate', '600k', '-bufsize', '1200k',
-            '-c:a', 'aac', '-b:a', '96k',
-            '-f', 'flv'
-          )
-        } else {
-          // Additional streams: lower quality to reduce CPU load
-          outputArgs.push(
-            '-map', '0:v', '-map', '0:a',
-            '-c:v', 'libx264', '-preset', 'ultrafast',
-            '-profile:v', 'main', '-pix_fmt', 'yuv420p',
-            '-b:v', '400k', '-maxrate', '400k', '-bufsize', '800k',
-            '-s', '854x480',  // Lower resolution for additional streams
-            '-r', '15',  // Even lower framerate for additional streams
-            '-c:a', 'aac', '-b:a', '64k',
-            '-f', 'flv'
-          )
-        }
-      } else {
-        // Single stream: use the base encoding settings
-        outputArgs.push('-f', 'flv')
-      }
-      
-      // Add connection options for RTMPS
-      if (url.includes('rtmps://')) {
-        outputArgs.push('-rtmp_conn', 'S:allowPublish')
-      }
-      outputArgs.push(url)
-    })
-    
-    const args = [...baseArgs, ...outputArgs]
     
     console.log('🚀 Starting FFmpeg with command:')
     console.log(`${ffmpegPath} ${args.join(' ')}`)
@@ -154,12 +121,16 @@ function startStream(o){
       
       p.on('exit', (code, signal) => {
         console.log(`🔚 FFmpeg exited with code: ${code}, signal: ${signal}`)
+        currentProc = null  // Always clear the process reference
+        
         if (code !== 0 && code !== null) {
           console.error('❌ FFmpeg error output:', errorOutput)
           
           // Parse common error types
           let errorMessage = 'Streaming failed - check logs for details'
-          if (errorOutput.includes('Error number -10053')) {
+          if (errorOutput.includes('Error in the pull function') || errorOutput.includes('IO error: End of file')) {
+            errorMessage = 'RTMP connection failed - check stream key and network connection'
+          } else if (errorOutput.includes('Error number -10053')) {
             errorMessage = 'Network connection lost - one RTMP server may be unreachable'
           } else if (errorOutput.includes('Connection refused')) {
             errorMessage = 'RTMP server connection refused - check URL and network'
@@ -167,8 +138,10 @@ function startStream(o){
             errorMessage = 'Device not found - camera or microphone unavailable'
           } else if (errorOutput.includes('Permission denied')) {
             errorMessage = 'Device access denied - check permissions'
-          } else if (errorOutput.includes('already in use')) {
-            errorMessage = 'Device busy - close other applications using camera/mic'
+          } else if (errorOutput.includes('already in use') || errorOutput.includes('Could not run graph')) {
+            errorMessage = 'Device busy - close other applications using camera/mic (Chrome, Skype, Teams, etc.)'
+          } else if (errorOutput.includes('Could not find audio only device')) {
+            errorMessage = 'Audio device not found - try refreshing devices or check microphone connection'
           } else if (errorOutput.includes('Invalid data found')) {
             errorMessage = 'Invalid RTMP stream key or URL format'
           } else if (errorOutput.includes('real-time buffer') && errorOutput.includes('too full')) {
@@ -182,7 +155,6 @@ function startStream(o){
           // Send specific error to frontend
           exitHandlers.forEach(h => h(code, signal, errorMessage))
         } else {
-          currentProc = null
           exitHandlers.forEach(h => h(code, signal))
         }
       })
@@ -206,7 +178,7 @@ function startStream(o){
   })
 }
 
-function hookLogs(p,cb){ 
+function hookLogs(p, cb, statsCallback){ 
   if(!p) return
   
   p.stderr.on('data', d => {
@@ -219,11 +191,21 @@ function hookLogs(p,cb){
     
     output.split(/\r?\n/).forEach(l => {
       if(l.trim()) {
+        const line = l.trim()
+        
+        // Extract and send stats separately if callback provided
+        if (statsCallback && line.includes('frame=') && line.includes('fps=') && line.includes('bitrate=')) {
+          const stats = parseFFmpegStats(line)
+          if (stats) {
+            statsCallback(stats)
+          }
+        }
+        
         // Send important messages to frontend, filter buffer spam
-        if (!l.includes('Last message repeated') && 
-            !(l.includes('real-time buffer') && l.includes('frame dropped'))) {
-          cb(l.trim())
-        } else if (l.includes('real-time buffer') && !l.includes('repeated')) {
+        if (!line.includes('Last message repeated') && 
+            !(line.includes('real-time buffer') && line.includes('frame dropped'))) {
+          cb(line)
+        } else if (line.includes('real-time buffer') && !line.includes('repeated')) {
           // Only send the first buffer warning, not the repeats
           cb('⚠️ Camera buffer warning - consider reducing quality if persistent')
         }
@@ -240,21 +222,58 @@ function hookLogs(p,cb){
   })
 }
 
+function parseFFmpegStats(line) {
+  // Parse FFmpeg progress line: frame= 1234 fps= 30 q=28.0 size= 1024kB time=00:00:41.23 bitrate= 203.4kbits/s speed=1.0x
+  const frameMatch = line.match(/frame=\s*(\d+)/)
+  const fpsMatch = line.match(/fps=\s*(\d+(?:\.\d+)?)/)
+  const bitrateMatch = line.match(/bitrate=\s*(\d+(?:\.\d+)?)kbits\/s/)
+  const timeMatch = line.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/)
+  const sizeMatch = line.match(/size=\s*(\d+)kB/)
+  const speedMatch = line.match(/speed=\s*(\d+(?:\.\d+)?)x/)
+  
+  if (!fpsMatch && !bitrateMatch && !timeMatch) return null
+  
+  const stats = {}
+  
+  if (frameMatch) stats.frame = parseInt(frameMatch[1])
+  if (fpsMatch) stats.fps = parseFloat(fpsMatch[1])
+  if (bitrateMatch) stats.bitrate = parseFloat(bitrateMatch[1])
+  if (sizeMatch) stats.size = parseInt(sizeMatch[1])
+  if (speedMatch) stats.speed = parseFloat(speedMatch[1])
+  
+  if (timeMatch) {
+    const hours = parseInt(timeMatch[1])
+    const minutes = parseInt(timeMatch[2])
+    const seconds = parseInt(timeMatch[3])
+    stats.duration = hours * 3600 + minutes * 60 + seconds
+  }
+  
+  return stats
+}
+
 function stopStream(){ 
   if(!currentProc) return
   console.log('🛑 Stopping FFmpeg process...')
+  
+  const proc = currentProc
+  currentProc = null  // Clear reference immediately
+  
   try {
-    currentProc.kill('SIGTERM')
+    proc.kill('SIGTERM')
     setTimeout(() => {
-      if (currentProc && !currentProc.killed) {
+      if (proc && !proc.killed) {
         console.log('🔥 Force killing FFmpeg process...')
-        currentProc.kill('SIGKILL')
+        try {
+          proc.kill('SIGKILL')
+        } catch (err) {
+          console.log('Process already terminated')
+        }
       }
-    }, 3000)
+    }, 2000)
   } catch (err) {
     console.error('Error stopping FFmpeg:', err)
     try {
-      currentProc.kill('SIGKILL')
+      proc.kill('SIGKILL')
     } catch {}
   }
 }
