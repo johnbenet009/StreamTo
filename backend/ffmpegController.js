@@ -19,7 +19,7 @@ function getQualitySettings(preset, destinationCount) {
       fps: '15',
       keyframe: '30',
       preset: 'ultrafast',
-      bufferSize: '30M'  // Smaller buffer for webcams
+      bufferSize: '50M'     // Reduced from 200M to prevent buffer overflow
     },
     medium: {
       videoBitrate: '1500k',
@@ -29,7 +29,7 @@ function getQualitySettings(preset, destinationCount) {
       fps: '25',
       keyframe: '50',
       preset: 'ultrafast',  // Faster preset for multiple streams
-      bufferSize: '50M'     // Optimized buffer size
+      bufferSize: '75M'     // Reduced from 200M to prevent buffer warnings
     },
     high: {
       videoBitrate: '2500k',
@@ -39,7 +39,7 @@ function getQualitySettings(preset, destinationCount) {
       fps: '30',
       keyframe: '60',
       preset: 'fast',       // Balanced preset
-      bufferSize: '75M'     // Reasonable buffer
+      bufferSize: '100M'    // Reasonable buffer for high quality
     },
     ultra: {
       videoBitrate: '4000k',
@@ -49,7 +49,7 @@ function getQualitySettings(preset, destinationCount) {
       fps: '30',
       keyframe: '60',
       preset: 'fast',       // Don't use slow presets for multiple streams
-      bufferSize: '100M'    // Conservative buffer
+      bufferSize: '125M'    // Conservative buffer for ultra quality
     }
   }
   
@@ -96,63 +96,62 @@ function startStream(o){
 
     const ffmpegPath = getFFmpegPath()
     
-    // Get quality settings
-    const qualitySettings = getQualitySettings(quality || 'medium', rtmps.length)
+    // Simple quality presets that work with device names
+    const qualityPresets = {
+      low: { bitrate: '400k', maxrate: '500k', bufsize: '800k', buffer: '75M', fps: '15' },
+      medium: { bitrate: '800k', maxrate: '1000k', bufsize: '1600k', buffer: '100M', fps: '20' },
+      high: { bitrate: '1500k', maxrate: '1800k', bufsize: '3000k', buffer: '125M', fps: '25' },
+      ultra: { bitrate: '2500k', maxrate: '3000k', bufsize: '5000k', buffer: '150M', fps: '30' }
+    }
     
-    // Simple approach that was working before
+    const selectedQuality = qualityPresets[quality] || qualityPresets.medium
     const inputString = `video=${video}:audio=${audio}`
     
-    // EFFICIENT APPROACH: Single encode, multiple outputs
-    // This encodes ONCE and sends the same stream to all platforms
     let args
-    
     if (rtmps.length === 1) {
       // Single destination - simple and reliable
       args = [
         '-y',
         '-f', 'dshow',
-        '-rtbufsize', qualitySettings.bufferSize,
+        '-rtbufsize', selectedQuality.buffer,
         '-i', inputString,
         '-c:v', 'libx264',
-        '-preset', qualitySettings.preset,
+        '-preset', 'ultrafast',
         '-tune', 'zerolatency',
         '-pix_fmt', 'yuv420p',
-        '-b:v', qualitySettings.videoBitrate,
-        '-maxrate', qualitySettings.maxrate,
-        '-bufsize', qualitySettings.bufsize,
-        '-g', qualitySettings.keyframe,
-        '-r', qualitySettings.fps,
+        '-b:v', selectedQuality.bitrate,
+        '-maxrate', selectedQuality.maxrate,
+        '-bufsize', selectedQuality.bufsize,
+        '-g', '50',
+        '-r', selectedQuality.fps,
         '-c:a', 'aac',
-        '-b:a', qualitySettings.audioBitrate,
+        '-b:a', '128k',
         '-f', 'flv',
         rtmps[0]
       ]
     } else {
-      // Multiple destinations - ENCODE ONCE, distribute to all
-      // Use tee muxer with proper syntax for efficient streaming
-      const teeOutputs = rtmps.map(url => `[f=flv:onfail=ignore:use_fifo=1]${url}`).join('|')
-      
+      // Multiple destinations - ENCODE ONCE, stream to all (efficient!)
+      const teeOutput = rtmps.map(url => `[f=flv:onfail=ignore]${url}`).join('|')
       args = [
         '-y',
         '-f', 'dshow',
-        '-rtbufsize', qualitySettings.bufferSize,
+        '-rtbufsize', selectedQuality.buffer,
         '-i', inputString,
-        // Encode ONCE with optimal settings
         '-c:v', 'libx264',
-        '-preset', qualitySettings.preset,
+        '-preset', 'ultrafast',
         '-tune', 'zerolatency',
         '-pix_fmt', 'yuv420p',
-        '-b:v', qualitySettings.videoBitrate,
-        '-maxrate', qualitySettings.maxrate,
-        '-bufsize', qualitySettings.bufsize,
-        '-g', qualitySettings.keyframe,
-        '-r', qualitySettings.fps,
+        '-b:v', selectedQuality.bitrate,
+        '-maxrate', selectedQuality.maxrate,
+        '-bufsize', selectedQuality.bufsize,
+        '-g', '50',
+        '-r', selectedQuality.fps,
         '-c:a', 'aac',
-        '-b:a', qualitySettings.audioBitrate,
-        // Use tee muxer with FIFO for better performance
+        '-b:a', '96k',
         '-f', 'tee',
-        '-flags', '+global_header',  // Important for tee muxer
-        teeOutputs
+        '-map', '0:v',
+        '-map', '0:a',
+        teeOutput
       ]
     }
     
